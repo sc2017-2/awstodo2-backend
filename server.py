@@ -1,37 +1,57 @@
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import psycopg2
+import os
 app = Flask(__name__)
 CORS(app)
 
-tarefas = [
-    { "id": 1, "descricao": "Comprar pão", "concluida": True },
-    { "id": 2, "descricao": "Ler e-mails", "concluida": False }
-]
+
+if "AWSTODO_DB_CONN_STR" in os.environ:
+    db_conn_str = os.environ["AWSTODO_DB_CONN_STR"]
+else:
+    db_conn_str = "dbname='awstodo1' user='postgres' host='127.0.0.1' password='123456'"
 
 
 @app.route("/tarefas", methods=["GET"])
 def get_tarefas():
+    conn = psycopg2.connect(db_conn_str)
+    cur = conn.cursor()
+    cur.execute("""SELECT id, descricao, concluida FROM tarefas""")
+    rows = cur.fetchall()
+    tarefas = []
+    for row in rows:
+        tarefas.append({
+            "id": row[0],
+            "descricao": row[1],
+            "concluida": row[2]
+        })
+    cur.close()
+    conn.close()
     return jsonify(tarefas)
 
 
 @app.route("/tarefas", methods=["POST"])
 def nova_tarefa():
-    global tarefas
-    tarefa = {
-        "id": max(map(lambda x: x["id"], tarefas)) + 1,
-        "descricao": request.form["descricao"],
-        "concluida": False
-    }
-    tarefas.append(tarefa)
+    conn = psycopg2.connect(db_conn_str)
+    cur = conn.cursor()
+    cur.execute("""INSERT INTO tarefas (descricao, concluida) VALUES (%s, %s)""",
+                (request.form["descricao"], False))
+    conn.commit()
+    cur.close()
+    conn.close()
     return ''
 
 
 @app.route("/tarefas/<id>/concluir", methods=["POST"])
 def concluir_tarefa(id):
-    global tarefas
-    for tarefa in filter(lambda x: x["id"] == int(id), tarefas):
-        tarefa["concluida"] = True
+    conn = psycopg2.connect(db_conn_str)
+    cur = conn.cursor()
+    cur.execute("""UPDATE tarefas SET concluida = %s WHERE id = %s""",
+                (True, id))
+    conn.commit()
+    cur.close()
+    conn.close()
     return ''
 
 
